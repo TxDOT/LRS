@@ -1,0 +1,515 @@
+
+<!DOCTYPE html>
+<!-- Created by Michael Chamberlain -->
+<!-- This work is licensed under the Creative Commons Attribution-ShareAlike 4.0 International License. To view a copy of this license, visit https://creativecommons.org/licenses/by-sa/4.0/ -->
+<!-- November 1, 2021 - Create Form -->
+<!-- November 3, 2021 - Added LRS conversions -->
+<html>
+    <head>
+        <style type="text/css">
+            body {
+              font-family: Arial, Helvetica, sans-serif;
+            }
+            #content {
+                min-width: 500px;
+                max-width: 600px;
+                background-color: lightblue;
+                padding: 20px;
+                text-align: center;
+                margin: auto;
+                width: 40%;
+            }
+            input {
+                width: 75%;
+                padding: 10px;
+                margin-top: 10px;
+                margin-bottom: 10px;
+                cursor: pointer;
+            }
+            #btnSubmit {
+                width: 80%;
+                padding: 10px;
+                margin-top: 30px;
+                /*margin-bottom: 30px;                */
+            }
+            #btnClearForm {
+                width: 80%;
+                padding: 10px;
+                margin-top: 10px;
+                margin-bottom: 30px; 
+            }
+            #intro {
+                text-align: justify;
+            }
+            #bulkResults {
+                text-align: justify;
+            }
+            h1 {
+                margin-bottom: 40px;
+            }
+        </style>
+        <script src="https://js.arcgis.com/3.31/"></script>
+        <script>
+            //Require Begin
+            require(["esri/geometry/geometryEngine","esri/geometry/webMercatorUtils","esri/SpatialReference","dojo/dom","dojo/on","dojo/domReady!"], function(geometryEngine,webMercatorUtils,SpatialReference,dom,on) {
+            
+            // resolveLRM();   
+            
+            on(dom.byId("btnClearForm"), "click", function (event) {
+                document.getElementById("nbrLatitude").value = "";
+                document.getElementById("nbrLongitude").value = "";
+                document.getElementById("txtRIA_RTE_ID").value = "";
+                document.getElementById("nbr_DFO").value = "";  
+                document.getElementById("txtCTRL_SECT").value = "";                     
+                document.getElementById("nbr_MPT").value = ""; 
+                document.getElementById("txtRIA_RTE_ID_MRKR").value = "";                     
+                document.getElementById("nbrRMRKR").value = "";                         
+                document.getElementById("nbrDISP").value = "";                      
+            });
+            
+            on(dom.byId("btnSubmit"), "click", function (event) {
+                var theLat = Number(document.getElementById("nbrLatitude").value);
+                var theLong = Number(document.getElementById("nbrLongitude").value);
+                
+                if (theLat&&theLong) {
+                    var convertedXY = webMercatorUtils.lngLatToXY(theLong, theLat);
+                    console.log(convertedXY);
+                    
+                    //[lat, long]
+                    processLatLong([convertedXY[1],convertedXY[0]]);                    
+                }
+                
+                var theRoute = document.getElementById("txtRIA_RTE_ID").value;
+                var theDFO = Number(document.getElementById("nbr_DFO").value);
+                
+                if (theRoute&&theDFO) {
+                    processDFO([theRoute,theDFO]);
+                }                
+                
+                var theControl = document.getElementById("txtCTRL_SECT").value;
+                var theMPT = Number(document.getElementById("nbr_MPT").value);
+                
+                if (theControl&&theMPT) {
+                    processMPT([theControl,theMPT]);    
+                }                  
+                
+                var theRouteMRKR = document.getElementById("txtRIA_RTE_ID_MRKR").value;
+                var theMRKR = Number(document.getElementById("nbrRMRKR").value);
+                var theDisp = Number(document.getElementById("nbrDISP").value);
+                
+                if (theRouteMRKR&&theMRKR&&theDisp) {
+                    processMarker([theRouteMRKR,theMRKR,theDisp]);   
+                }
+            }); 
+            
+            function getRightCharacters(theData,theNumber) {
+                return theData.substring(theData.length-theNumber, theData.length);
+            }
+            
+            function roundToDecimalPlace(value,decimals) {
+                return Number(Math.round(value+'e'+decimals)+'e-'+decimals);
+            }             
+            
+            // function resolveLRM() {
+            //     var docURL = document.URL;
+            //     var theURLlen = docURL.length;
+            //     var parameterBegin = docURL.indexOf("?");
+            //     var theVariables = [];
+            //     var theLRM = "";
+            //     var theLocation = [];
+
+            //     if (parameterBegin<0) {
+            //         console.log("No LRM's found.");
+            //         return;
+            //     }
+
+            //     var theParameters = getRightCharacters(docURL,theURLlen-parameterBegin-1);
+            //     theVariables = theParameters.split("=");
+            //     theLRM = theVariables[0];
+            //     theLocation = theVariables[1].split(",");
+                
+            //     if (theLRM == "LL") {
+            //         processLatLong(theLocation);
+            //     } else if (theLRM == "DFO") {
+            //         processDFO(theLocation);
+            //     } else if (theLRM == "MPT") {
+            //         processMPT(theLocation);
+            //     } else if (theLRM == "TRM") {
+            //         processMarker(theLocation);
+            //     } else {
+            //         console.log("No LL, DFO, or MPT found.");
+            //     }
+            // }    
+            
+            //Other LRMs are solved for Lat Long then passed here
+            function processLatLong(theLocation) {
+                //DFO and MPT calls include a 30 meter buffer (using web mercator projection), buffer can be adjusted as desired
+                //DFO
+                xmlRequestWithProcessingLRS("https://services.arcgis.com/KTcxiTD9dsQw4r7Z/arcgis/rest/services/TxDOT_Roadways/FeatureServer/0/query?f=json&returnGeometry=true&returnM=true&geometryPrecision=6&outFields=RTE_NM,RTE_PRFX,RTE_NBR,RTE_SFX&orderByFields=BEGIN_DFO&distance=30&geometryType=esriGeometryPoint&geometry=" + theLocation[1] + "," + theLocation[0], locateLatLongReturnMeasure, theLocation, "DFO");
+                //MPT
+                xmlRequestWithProcessingLRS("https://services.arcgis.com/KTcxiTD9dsQw4r7Z/arcgis/rest/services/TxDOT_Control_Sections/FeatureServer/0/query?f=json&returnGeometry=true&returnM=true&geometryPrecision=6&outFields=CTRL_SECT_NBR&distance=30&geometryType=esriGeometryPoint&geometry=" + theLocation[1] + "," + theLocation[0], locateLatLongReturnMeasure, theLocation, "MPT");
+                //TRM    
+                xmlRequestWithProcessingLRS("https://services.arcgis.com/KTcxiTD9dsQw4r7Z/arcgis/rest/services/TxDOT_Roadways/FeatureServer/0/query?f=json&returnGeometry=true&returnM=true&geometryPrecision=6&outFields=RTE_NM,RTE_PRFX,RTE_NBR,RTE_SFX&orderByFields=BEGIN_DFO&distance=30&geometryType=esriGeometryPoint&geometry=" + theLocation[1] + "," + theLocation[0], locateLatLongReturnMeasure, theLocation, "TRM");
+            }
+            
+            function processDFO(theLocation) {
+                xmlRequestWithProcessingLRS("https://services.arcgis.com/KTcxiTD9dsQw4r7Z/arcgis/rest/services/TxDOT_Roadways/FeatureServer/0/query?f=json&returnGeometry=true&returnM=true&orderByFields=BEGIN_DFO&geometryPrecision=6&where=RTE_NM='" + theLocation[0] + "'", locateMeasureReturnLatLong, theLocation[1], "DFO");                
+            }
+            
+            function processMPT(theLocation) {
+                xmlRequestWithProcessingLRS("https://services.arcgis.com/KTcxiTD9dsQw4r7Z/arcgis/rest/services/TxDOT_Control_Sections/FeatureServer/0/query?f=json&returnGeometry=true&returnM=true&geometryPrecision=6&where=CTRL_SECT_NBR='" + theLocation[0] + "'", locateMeasureReturnLatLong, theLocation[1], "MPT");
+            }
+            
+            function processMarker(theLocation) {
+                xmlRequestWithProcessingLRS("https://services.arcgis.com/KTcxiTD9dsQw4r7Z/arcgis/rest/services/TxDOT_Reference_Markers/FeatureServer/0/query?f=json&returnGeometry=true&returnM=true&outFields=RTE_NM,DFO,MRKR_NBR&orderByFields=DFO&geometryPrecision=6&where=RTE_NM='" + theLocation[0] + "' AND MRKR_NBR=" + theLocation[1], locateTRMReturnDFO, theLocation, "TRM");
+            }
+            
+            //Accepts Line Geometry and M value, returns X,Y point at input M value, passes results to processLatLong
+            function locateMeasureReturnLatLong(theLine,pointMeasure,lrmType) {
+                if (theLine.features.length<1) {
+                    alert("Route Not Found.");
+                    return;
+                }
+                
+                var pointLocation = [];
+                var prevCoordM;
+                var curCoordM;
+                var beginM = 0;
+                var endM = 0;
+                var beginPoint=[];
+                var endPoint=[]; 
+                var totalLength;
+                var beginPercentOfWhole;
+                var beginRemainderPercent;
+                var newX;
+                var newY;
+                
+                for (var i = 0; i < theLine.features.length; i++) {
+                    //Starting at the second coordinate for comparison purposes
+                    for (var j = 1; j < theLine.features[i].geometry.paths[0].length; j++) {
+                        prevCoordM = roundToDecimalPlace(theLine.features[i].geometry.paths[0][j-1][2],3);
+                        curCoordM = roundToDecimalPlace(theLine.features[i].geometry.paths[0][j][2],3);  
+
+                        //If the pointMeasure is an exact match of the vertex measure
+                        if (pointMeasure===curCoordM) {
+                            pointLocation.push(theLine.features[i].geometry.paths[0][j][0],theLine.features[i].geometry.paths[0][j][1]);
+                            processLatLong([pointLocation[0],pointLocation[1]]);
+                            return;
+                        } else {
+                            //Finding the points on either side of the desired measure
+                            if (pointMeasure>prevCoordM&&pointMeasure<curCoordM) {
+                                beginM = roundToDecimalPlace(theLine.features[i].geometry.paths[0][j-1][2],3);
+                                beginPoint.push(theLine.features[i].geometry.paths[0][j-1][0],theLine.features[i].geometry.paths[0][j-1][1]);
+                                
+                                endM = roundToDecimalPlace(theLine.features[i].geometry.paths[0][j][2],3);
+                                endPoint.push(theLine.features[i].geometry.paths[0][j][0],theLine.features[i].geometry.paths[0][j][1]);
+                                
+                                //Total length for calc
+                                totalLength = roundToDecimalPlace(endM - beginM,3);
+                                
+                                //Percents of begin/end calc
+                                beginPercentOfWhole = roundToDecimalPlace((pointMeasure - beginM) / totalLength,2);
+                                beginRemainderPercent = 1 - beginPercentOfWhole;
+                                
+                                //New X
+                                newX = (beginPercentOfWhole * endPoint[0]) + (beginRemainderPercent * beginPoint[0]);
+                                
+                                //New Y
+                                newY = (beginPercentOfWhole * endPoint[1]) + (beginRemainderPercent * beginPoint[1]); 
+                                
+                                pointLocation.push(newX,newY);
+                                processLatLong([newY,newX]);
+                                return;
+                            }  
+                        } 
+                    }
+                }
+                
+                //If the above conditions do not find a match this message will be written to the document
+                alert("Measure " + pointMeasure + " could not be found on the route.");
+            }
+            
+            //Accepts Line Geometry, Lat/Long coordinate and LRM Type, returns Route and DFO or Control Section and MPT
+            function locateLatLongReturnMeasure(theLine,inputLatLong,lrmType) {
+                //No results condition
+                if (theLine.features.length<1) {
+                    // document.write("No features returned within 30 meter buffer.");
+                    alert("No features returned within 30 meter buffer.");
+                    return;
+                }         
+
+                //point create from user inputLatLong
+                var thePoint = new esri.geometry.Point([Number(inputLatLong[1]),Number(inputLatLong[0])], new SpatialReference({wkid: 3857 }));
+                
+                //findNearestCoordinate loops through the features returned in theLine, tests to find the shortest distance to each feature, returns the nearest feature and point on feature.
+                var nearestPointOnLine = findNearestCoordinate(theLine,thePoint,lrmType);
+                
+                //the index of the closest record
+                var featurePartIndex = nearestPointOnLine[1];
+                
+                //the nearest vertex to the closest point 
+                var nearestVertex = geometryEngine.nearestVertex(theLine.features[featurePartIndex].geometry, nearestPointOnLine[0]);
+                
+                //nearest vertex index
+                var vertexIndex = nearestVertex.vertexIndex;
+
+                if (lrmType=="DFO"||lrmType=="TRM") {
+                    var closeRoute = theLine.features[featurePartIndex].attributes.RTE_NM;    
+                }
+                if (lrmType=="MPT") {
+                    var closeRoute = theLine.features[featurePartIndex].attributes.CTRL_SECT_NBR;    
+                }                 
+                
+                //Store the max vertex index of the line
+          	    var maxVertex = theLine.features[featurePartIndex].geometry.paths[0].length-1;
+          	    
+          	    //Default calculated M value to 0
+          	    var calculatedM = 0;
+          	    
+          	    //Condition for the first vertex (if user clicked at the beginning of a line)
+          	    if (vertexIndex == 0) {
+            	  var coord2 = theLine.features[featurePartIndex].geometry.paths[0][vertexIndex];         
+                  var thePoint2 = new esri.geometry.Point([coord2[0],coord2[1]], new SpatialReference({wkid: 3857 }));
+                  var point2M = theLine.features[featurePartIndex].geometry.paths[0][vertexIndex][2]; 
+                  var geoMeterLength = geometryEngine.geodesicLength(createTwoPointPolyline(thePoint2,nearestPointOnLine[0]), 9001);
+                  var geoMileValue = ((geoMeterLength/1609.344)*1000)/1000;
+                  calculatedM = point2M + geoMileValue;
+          	    }
+          	    
+          	    //Condition for the last vertex (if user clicked at the end of a line)
+          	    if (vertexIndex == maxVertex) {
+            	  var coord2 = theLine.features[featurePartIndex].geometry.paths[0][vertexIndex];         
+                  var thePoint2 = new esri.geometry.Point([coord2[0],coord2[1]], new SpatialReference({wkid: 3857 }));
+                  var point2M = theLine.features[featurePartIndex].geometry.paths[0][vertexIndex][2]; 
+                  var geoMeterLength = geometryEngine.geodesicLength(createTwoPointPolyline(thePoint2,nearestPointOnLine[0]), 9001);
+                  var geoMileValue = ((geoMeterLength/1609.344)*1000)/1000;  
+                  calculatedM = point2M - geoMileValue;
+          	    }          	    
+
+                //Condition for everything between first and last vertex
+                if (vertexIndex > 0 && vertexIndex < maxVertex) {
+                    //Get coordinates of the nearest vertex, vertex before nearest vertex, vertex after nearest vertex
+            	    var coord1 = theLine.features[featurePartIndex].geometry.paths[0][vertexIndex-1];
+            	    var coord2 = theLine.features[featurePartIndex].geometry.paths[0][vertexIndex];
+            	    var coord3 = theLine.features[featurePartIndex].geometry.paths[0][vertexIndex+1];          	              	    
+            	    
+            	    //Create points from above coordinates
+            	    var thePoint1 = new esri.geometry.Point([coord1[0],coord1[1]], new SpatialReference({wkid: 3857 }));
+            	    var thePoint2 = new esri.geometry.Point([coord2[0],coord2[1]], new SpatialReference({wkid: 3857 })); 
+            	    var thePoint3 = new esri.geometry.Point([coord3[0],coord3[1]], new SpatialReference({wkid: 3857 })); 
+            	    
+            	    //Create simple 2 point lines with from Point1, Point2, Point3
+            	    var firstTestSegment = createTwoPointPolyline(thePoint1,thePoint2);
+            	    var secondTestSegment = createTwoPointPolyline(thePoint2,thePoint3);
+            	    
+            	    //Intersect firstIntersectingPoint with each line (returns true or false)
+            	    var intersectsFirstSegment = geometryEngine.intersects(nearestPointOnLine[0],firstTestSegment);
+            	    var intersectsSecondSegment = geometryEngine.intersects(nearestPointOnLine[0],secondTestSegment);
+            	    
+            	    //Get M values of nearest vertex, vertex before nearest vertex, vertex after nearest vertex
+          	        var point1M = theLine.features[featurePartIndex].geometry.paths[0][vertexIndex-1][2];
+          	        var point2M = theLine.features[featurePartIndex].geometry.paths[0][vertexIndex][2];  
+          	        var point3M = theLine.features[featurePartIndex].geometry.paths[0][vertexIndex+1][2];          	      
+          	      
+          	        //Create a two point line, measure the length of it, convert to miles (**Room for improvement** This 2 point line should be created in TSMS NAD 83 instead of Web Mercator)
+                 	var geoMeterLength = geometryEngine.geodesicLength(createTwoPointPolyline(thePoint2,nearestPointOnLine[0]), 9001);
+                    var geoMileValue = ((geoMeterLength/1609.344)*1000)/1000;        	      
+            	    
+            	    //Conditions for calculating M value of clicked point based on intersection with simple 2 point lines
+            	    //First condition tests if point falls on first simple 2 point line
+            	    //Second condition is based on previous vertex M value and next vertex M value in relation to nearest vertex M value
+            	    if (intersectsFirstSegment) {
+            	      if (point1M>point2M) {
+            	        calculatedM = point2M + geoMileValue;
+            	      }
+            	      else {
+            	        calculatedM = point2M - geoMileValue;
+            	      }
+            	    }
+            	    else {
+            	      if (point3M>point2M) {
+            	        calculatedM = point2M + geoMileValue;
+            	      }
+            	      else {
+            	        calculatedM = point2M - geoMileValue;
+            	      }          	      
+            	    }                  
+                }              
+                
+                calculatedM = roundToDecimalPlace(calculatedM,3);
+                
+                if (lrmType=="DFO") {
+                    //Lat Long of the snapped point is nearestPointOnLine[0].x, nearestPointOnLine[0].y and can differ from user input Lat Long
+                    var convertXYToLatLong = webMercatorUtils.xyToLngLat(nearestPointOnLine[0].x, nearestPointOnLine[0].y);
+                    document.getElementById("nbrLatitude").value = roundToDecimalPlace(convertXYToLatLong[1],8);
+                    document.getElementById("nbrLongitude").value = roundToDecimalPlace(convertXYToLatLong[0],8);                    
+                    document.getElementById("txtRIA_RTE_ID").value = closeRoute;
+                    document.getElementById("nbr_DFO").value = calculatedM;                    
+                }
+                if (lrmType=="MPT") {
+                    document.getElementById("txtCTRL_SECT").value = closeRoute;                     
+                    document.getElementById("nbr_MPT").value = calculatedM; 
+                }  
+                if (lrmType=="TRM") {
+                    //Uses buffer of 6500 meters
+                    xmlRequestWithProcessingLRS("https://services.arcgis.com/KTcxiTD9dsQw4r7Z/arcgis/rest/services/TxDOT_Reference_Markers/FeatureServer/0/query?f=json&returnGeometry=true&returnM=true&distance=6500&geometryType=esriGeometryPoint&geometry=" + nearestPointOnLine[0].x + "," + nearestPointOnLine[0].y + "&outFields=RTE_NM,DFO,MRKR_NBR&orderByFields=DFO&geometryPrecision=6&where=RTE_NM='" + closeRoute + "'", calculateTRMDisplacement,thePoint,calculatedM);
+                }
+            }  
+            
+            //Calculates DFO by adding desired displacement then passing calculated DFO to the processDFO function            
+            function locateTRMReturnDFO(theMarker,theLocation,lrmType) {
+                var calculatedDFO = Number(theMarker.features[0].attributes.DFO) + Number(theLocation[2]);
+                processDFO([theLocation[0],calculatedDFO]);
+            }            
+            
+            //Calculates Marker and Displacement
+            function calculateTRMDisplacement(theMarkers,thePoint,calculatedM) {
+                var closeRoute;
+                var closeMarker;
+                var closeMarkerDFO;
+                var finalDisplacement;
+                var markerCount = theMarkers.features.length-1;
+                
+                //Checks for an exact match between calculatedM and marker DFO's (rare but needs to be there)
+                for (var a = 0; a < theMarkers.features.length; a++) {
+                    if (calculatedM===theMarkers.features[a].attributes.DFO) {
+                        closeRoute = theMarkers.features[a].attributes.RTE_NM;
+                        closeMarker = theMarkers.features[a].attributes.MRKR_NBR;
+                        closeMarkerDFO = theMarkers.features[a].attributes.DFO;
+                        finalDisplacement = 0;
+                        
+                        document.getElementById("txtRIA_RTE_ID_MRKR").value = closeRoute;                     
+                        document.getElementById("nbrRMRKR").value = closeMarker;                         
+                        document.getElementById("nbrDISP").value = finalDisplacement;
+                        return;
+                    }
+                }                
+                
+                //Check results to calculate route, marker, and displacement if no exact match if found above
+                if (calculatedM<theMarkers.features[0].attributes.DFO) {
+                    //If calculatedM is less than the DFO for the first returned Marker                    
+                    closeRoute = theMarkers.features[0].attributes.RTE_NM;
+                    closeMarker = theMarkers.features[0].attributes.MRKR_NBR;
+                    closeMarkerDFO = theMarkers.features[0].attributes.DFO;
+                    finalDisplacement = roundToDecimalPlace(calculatedM-closeMarkerDFO,3);
+                } else if (calculatedM>theMarkers.features[markerCount].attributes.DFO) {
+                    //If calculatedM is greater than the DFO for the last returned Marker                    
+                    closeRoute = theMarkers.features[markerCount].attributes.RTE_NM;
+                    closeMarker = theMarkers.features[markerCount].attributes.MRKR_NBR;
+                    closeMarkerDFO = theMarkers.features[markerCount].attributes.DFO;
+                    finalDisplacement = roundToDecimalPlace(calculatedM-closeMarkerDFO,3);                    
+                } else {
+                    //Start at second Marker 
+                    for (var i = 1; i < theMarkers.features.length; i++) {
+                        if (calculatedM>theMarkers.features[i-1].attributes.DFO&&calculatedM<theMarkers.features[i].attributes.DFO) {
+                            closeRoute = theMarkers.features[i-1].attributes.RTE_NM;
+                            closeMarker = theMarkers.features[i-1].attributes.MRKR_NBR;
+                            closeMarkerDFO = theMarkers.features[i-1].attributes.DFO;                        
+                        }
+                    }
+                    finalDisplacement = roundToDecimalPlace(calculatedM-closeMarkerDFO,3);                    
+                }
+                
+                document.getElementById("txtRIA_RTE_ID_MRKR").value = closeRoute;                     
+                document.getElementById("nbrRMRKR").value = closeMarker;                         
+                document.getElementById("nbrDISP").value = finalDisplacement;            
+                
+            }
+            
+            //XML HTTP Request - With callback to handle follow up processing in the onreadystatechange function
+            //---------------------------------------
+            function xmlRequestWithProcessingLRS(theService,callback,theLocation,lrmType) {
+                var xmlhttp = new XMLHttpRequest();
+                xmlhttp.responseType = 'json';
+                
+                xmlhttp.onreadystatechange=function() {
+                    if (xmlhttp.readyState==4 && xmlhttp.status==200)	{
+                        callback(xmlhttp.response,theLocation,lrmType);
+                    }
+                };
+                
+                xmlhttp.open("POST",theService,true);
+                xmlhttp.send();
+            }
+            //--------------------------------------- 
+    
+            //Create a two point line used to determine measure direction by spatial intersection
+            function createTwoPointPolyline(point1,point2) {
+                var newPolyline = new esri.geometry.Polyline(new esri.SpatialReference({wkid:3857}));
+                newPolyline.type = "polyline";
+                var tmpAttLine = [];
+                tmpAttLine.push(point1);
+                tmpAttLine.push(point2);
+                newPolyline.addPath(tmpAttLine); 
+                return newPolyline;        
+            }      
+    
+            //Loops through all the features in the line and finds the shortest distance to the nearest coordinate, returns the nearest coordinate and feature index 
+            function findNearestCoordinate(theLine,theLocation,lrmType) {
+                var shortestDistance = 20000;
+                var firstIntersectingPoint;   
+                var firstIntersectingPointTemp; 
+                var featurePartIndex = 0;
+                
+                for (var h=0; h < theLine.features.length; h++) {
+                  firstIntersectingPointTemp = geometryEngine.nearestCoordinate(theLine.features[h].geometry, theLocation);
+                  if (firstIntersectingPointTemp.distance < shortestDistance) {
+                    shortestDistance = firstIntersectingPointTemp.distance;
+                    firstIntersectingPoint = firstIntersectingPointTemp;
+                    featurePartIndex = h;
+                  }
+                } 
+                
+                var returnPoint = new esri.geometry.Point([firstIntersectingPoint.coordinate.x,firstIntersectingPoint.coordinate.y], new SpatialReference({wkid: 3857 })); 
+                return [returnPoint,featurePartIndex];
+            } 
+            //Require End
+          });           
+        </script>        
+    </head>
+    <body>
+        <div id="content">
+            <div id="title"><h1>TxDOT LRS Service</h1></div>
+            <div id="intro">
+            <p>
+                TxDOT's Linear Referencing System (LRS) supports four Linear Referencing Methods (LRMs).  Enter at least one LRM 
+                below and the service will return the equivalent location in the other LRMs.
+            </p>
+            
+            <p>
+                Drag and drop a table in .csv or .xls format on this page to perform bulk conversions. Bulk conversion results are posted at the 
+                bottom of the page for download.
+            </p>
+            <p>
+                Direct calls to the LRS service can be made using this URL: ADD URL HERE  <br>LRS service documentation can be found here: ADD URL HERE
+            </p>
+            </div>
+            <br><br>
+            Latitude and Longitude<br>
+            <input id="nbrLatitude" type="text" placeholder="Latitude (Example 30.29756116)">
+            <input id="nbrLongitude" type="text" placeholder="Longitude (Example -97.71797136)">
+            <br><br>
+            Route and Distance From Origin<br>
+            <input id="txtRIA_RTE_ID" type="text" placeholder="Route Identifier (Example IH0035-KG)"> 
+            <input id="nbr_DFO" type="text" placeholder="Distance From Origin (Example 236.271)">        
+            <br><br>
+            Control Section and Milepoint<br>
+            <input id="txtCTRL_SECT" type="text" placeholder="Control Section (Example 001513)"> 
+            <input id="nbr_MPT" type="text" placeholder="Milepoint (Example 20.052)">        
+            <br><br>
+            Reference Marker and Displacement<br>
+            <input id="txtRIA_RTE_ID_MRKR" type="text" placeholder="Route Identifier (Example IH0035-KG)"> 
+            <input id="nbrRMRKR" type="text" placeholder="Reference Marker (Example 237)">        
+            <input id="nbrDISP" type="text" placeholder="Displacement (Example +0.008)"> 
+            <button id="btnSubmit">Convert LRM</button>
+            <button id="btnClearForm">Clear Form</button>
+            <div id="bulkResults">
+            <p>
+                Post bulk conversion results here after user drags and drops .csv or .xls, 
+                also show a download button so they can save the results.  Maybe provide a progress counter or incrementally post results
+                so the user knows it's working.
+            </p>
+            </div>
+        </div>
+    </body>
+</html>    
